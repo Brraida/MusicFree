@@ -37,6 +37,7 @@ interface IPanelBaseProps {
     // 定位方式
     positionMethod?: "top" | "bottom";
     renderBody: (loading: boolean) => JSX.Element;
+    onDismiss?: () => void;
 }
 
 export default function (props: IPanelBaseProps) {
@@ -46,6 +47,8 @@ export default function (props: IPanelBaseProps) {
         keyboardAvoidBehavior,
         positionMethod = "bottom",
     } = props;
+    const dismissRef = useRef(props.onDismiss);
+    dismissRef.current = props.onDismiss;
     const snapPoint = useSharedValue(0);
 
     const colors = useColors();
@@ -78,6 +81,7 @@ export default function (props: IPanelBaseProps) {
         backHandlerRef.current = BackHandler.addEventListener(
             "hardwareBackPress",
             () => {
+                dismissRef.current?.();
                 snapPoint.value = withTiming(0, timingConfig);
                 return true;
             },
@@ -86,6 +90,7 @@ export default function (props: IPanelBaseProps) {
         const listenerSubscription = DeviceEventEmitter.addListener(
             "hidePanel",
             (callback?: () => void) => {
+                dismissRef.current?.();
                 if (callback) {
                     hideCallbackRef.current.push(callback);
                 }
@@ -182,6 +187,7 @@ export default function (props: IPanelBaseProps) {
             <Pressable
                 style={style.maskWrapper}
                 onPress={() => {
+                    dismissRef.current?.();
                     snapPoint.value = withTiming(0, timingConfig);
                 }}>
                 <Animated.View

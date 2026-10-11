@@ -182,7 +182,8 @@ function _PluginItem(props: IPluginItemProps) {
         {
             title: t("pluginSetting.pluginItem.options.userVariables"),
             icon: "code-bracket-square",
-            onPress() {
+            async onPress() {
+                await plugin.ensureMounted();
                 if (Array.isArray(plugin.instance.userVariables)) {
                     showPanel("SetUserVariables", {
                         async onOk(newValue, closePanel) {
@@ -192,6 +193,9 @@ function _PluginItem(props: IPluginItemProps) {
                         },
                         variables: plugin.instance.userVariables,
                         initValues: pluginManager.getUserVariables(plugin),
+                        onValidate: plugin.supportedMethods.has("validateUserVariables")
+                            ? values => plugin.methods.validateUserVariables(values)
+                            : undefined,
                     });
                 }
             },

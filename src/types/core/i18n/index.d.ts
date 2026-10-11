@@ -1,5 +1,21 @@
 // 国际化语言数据接口定义
 export interface ILanguageData {
+    "configValidation.checking": string;
+    "configValidation.hint": string;
+    "configValidation.authentication": string;
+    "configValidation.configuration": string;
+    "configValidation.network": string;
+    "configValidation.server": string;
+    "configValidation.media": string;
+    "configValidation.failed": string;
+    "playbackError.title": string;
+    "playbackError.configuration": string;
+    "playbackError.authentication": string;
+    "playbackError.network": string;
+    "playbackError.server": string;
+    "playbackError.media": string;
+    "playbackError.configure": string;
+    "playbackError.dismiss": string;
     // 通用词汇
     "common.setting": string; // 设置
     "common.software": string; // 软件

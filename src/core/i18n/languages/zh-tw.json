@@ -1,4 +1,12 @@
 {
+    "configValidation.checking": "正在驗證…",
+    "configValidation.hint": "儲存前會驗證伺服器和帳號。忘記密碼時可取消，稍後再設定。",
+    "configValidation.authentication": "使用者名稱或密碼不正確，或帳號無存取權限。請修改後重試，也可取消，稍後再設定。",
+    "configValidation.configuration": "請填寫伺服器位址、使用者名稱和密碼。",
+    "configValidation.network": "無法連線至伺服器，請檢查位址和網路後重試，也可取消。",
+    "configValidation.server": "伺服器回傳異常內容，請檢查位址和服務狀態後重試。",
+    "configValidation.media": "伺服器無法完成驗證，請檢查服務狀態後重試。",
+    "configValidation.failed": "驗證未通過，請檢查設定後重試，也可取消。",
     "common.setting": "設定",
     "common.software": "軟體",
     "common.language": "語言",
@@ -122,7 +130,7 @@
     "artistDetail.musicSheet": "{artist} - 單曲",
     "pluginSetting.pluginItem.options.updatePlugin": "更新外掛",
     "pluginSetting.pluginItem.options.sharePlugin": "分享外掛",
-    "pluginSetting.pluginItem.options.uninstallPlugin": "卸載外掛",    
+    "pluginSetting.pluginItem.options.uninstallPlugin": "卸載外掛",
     "pluginSetting.pluginItem.options.uninstallPluginContent": "確認卸載外掛「{name}」嗎？",
     "pluginSetting.pluginItem.options.alternativePlugin": "音源重定向",
     "pluginSetting.pluginItem.alternativePlugin": "該外掛實際使用「{name}」外掛解析音樂的音源",
@@ -429,5 +437,13 @@
     "panel.sheetTags.title": "歌單類別",
     "repeatMode.SHUFFLE": "隨機播放",
     "repeatMode.QUEUE": "清單循環",
-    "repeatMode.SINGLE": "單曲循環"
+    "repeatMode.SINGLE": "單曲循環",
+    "playbackError.title": "{{platform}}暫時無法播放",
+    "playbackError.configuration": "請先填寫音樂服務的伺服器位址、使用者名稱和密碼。儲存後再點擊播放。",
+    "playbackError.authentication": "使用者名稱或密碼不正確。請檢查此外掛的帳號設定，儲存後再點擊播放。",
+    "playbackError.network": "暫時無法連線到音樂服務。請檢查網路和伺服器位址，稍後再試。",
+    "playbackError.server": "音樂服務傳回了異常內容。請檢查伺服器位址和服務狀態，稍後再試。",
+    "playbackError.media": "音樂庫中已找不到這首歌曲。請更新歌單或選擇其他歌曲。",
+    "playbackError.configure": "前往設定",
+    "playbackError.dismiss": "稍後處理"
 }

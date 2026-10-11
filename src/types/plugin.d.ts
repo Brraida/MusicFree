@@ -84,6 +84,8 @@ declare namespace IPlugin {
         description?: string;
         /** 用户自定义输入 */
         userVariables?: IUserVariable[];
+        /** Validate draft values before saving. Reject on failure; do not change stored values. */
+        validateUserVariables?: (values: Record<string, string>) => Promise<void>;
         /** 提示文本 */
         hints?: Record<string, string[]>;
         /** 搜索 */

@@ -1,4 +1,12 @@
 {
+    "configValidation.checking": "正在验证…",
+    "configValidation.hint": "保存前会验证服务器和账号。忘记密码时可取消，稍后再配置。",
+    "configValidation.authentication": "用户名或密码不正确，或账户无访问权限。请修改后重试，也可取消，稍后再配置。",
+    "configValidation.configuration": "请填写服务器地址、用户名和密码。",
+    "configValidation.network": "无法连接服务器，请检查地址和网络后重试，也可取消。",
+    "configValidation.server": "服务器返回了异常内容，请检查地址和服务状态后重试。",
+    "configValidation.media": "服务器无法完成验证，请检查服务状态后重试。",
+    "configValidation.failed": "验证未通过，请检查配置后重试，也可取消。",
     "common.setting": "设置",
     "common.software": "软件",
     "common.language": "语言",
@@ -429,5 +437,13 @@
     "panel.sheetTags.title": "歌单类别",
     "repeatMode.SHUFFLE": "随机播放",
     "repeatMode.QUEUE": "列表循环",
-    "repeatMode.SINGLE": "单曲循环"
+    "repeatMode.SINGLE": "单曲循环",
+    "playbackError.title": "{{platform}}暂时无法播放",
+    "playbackError.configuration": "请先填写音乐服务的服务器地址、用户名和密码。保存后再点击播放。",
+    "playbackError.authentication": "用户名或密码不正确。请检查该插件的账号配置，保存后再点击播放。",
+    "playbackError.network": "暂时无法连接音乐服务。请检查网络和服务器地址，稍后再试。",
+    "playbackError.server": "音乐服务返回了异常内容。请检查服务器地址和服务状态，稍后再试。",
+    "playbackError.media": "音乐库中已找不到这首歌曲。请更新歌单或选择其他歌曲。",
+    "playbackError.configure": "去配置",
+    "playbackError.dismiss": "稍后处理"
 }

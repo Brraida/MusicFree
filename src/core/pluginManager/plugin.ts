@@ -11,6 +11,7 @@ import { addFileScheme, getFileName } from "@/utils/fileUtils";
 import { getMediaExtraProperty, patchMediaExtra } from "@/utils/mediaExtra";
 import { getLocalPath, isSameMediaItem, resetMediaItem } from "@/utils/mediaUtils";
 import notImplementedFunction from "@/utils/notImplementedFunction.ts";
+import { getPluginPlaybackErrorKind } from "@/utils/pluginPlaybackError";
 import axios from "axios";
 import bigInt from "big-integer";
 import * as cheerio from "cheerio";
@@ -158,6 +159,11 @@ class PluginMethodsWrapper implements IPlugin.IPluginInstanceMethods {
     }
 
 
+    async validateUserVariables(values: Record<string, string>): Promise<void> {
+        await this.ensurePluginIsMounted();
+        await this.plugin.instance.validateUserVariables?.({ ...values });
+    }
+
     /** 搜索 */
     async search<T extends ICommon.SupportMediaType>(
         query: string,
@@ -195,6 +201,7 @@ class PluginMethodsWrapper implements IPlugin.IPluginInstanceMethods {
         quality: IMusic.IQualityKey = "standard",
         retryCount = 1,
         notUpdateCache = false,
+        throwPlaybackErrors = false,
     ): Promise<IPlugin.IMediaSourceResult | null> {
         await this.ensurePluginIsMounted();
         // 1. 本地搜索 其实直接读mediameta就好了
@@ -311,9 +318,16 @@ class PluginMethodsWrapper implements IPlugin.IPluginInstanceMethods {
             }
             return result;
         } catch (e: any) {
+            if (getPluginPlaybackErrorKind(e)) {
+                errorLog("插件播放请求失败", e?.message);
+                if (throwPlaybackErrors) {
+                    throw e;
+                }
+                return null;
+            }
             if (retryCount > 0 && e?.message !== "NOT RETRY") {
                 await delay(150);
-                return this.getMediaSource(musicItem, quality, --retryCount);
+                return this.getMediaSource(musicItem, quality, --retryCount, notUpdateCache, throwPlaybackErrors);
             }
             errorLog("获取真实源失败", e?.message);
             devLog("error", "获取真实源失败", e, e?.message);

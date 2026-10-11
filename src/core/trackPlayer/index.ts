@@ -17,6 +17,10 @@ import Network from "@/utils/network";
 import PersistStatus from "@/utils/persistStatus";
 import { getQualityOrder } from "@/utils/qualities";
 import { musicIsPaused } from "@/utils/trackUtils";
+import { getPluginPlaybackErrorKind } from "@/utils/pluginPlaybackError";
+import { showPanel } from "@/components/panels/usePanel";
+import i18n from "@/core/i18n";
+import Toast from "@/utils/toast";
 import EventEmitter from "eventemitter3";
 import { produce } from "immer";
 import { atom, getDefaultStore, useAtomValue } from "jotai";
@@ -66,6 +70,7 @@ class TrackPlayer extends EventEmitter<{
     private currentIndex = -1;
     // 音乐播放器服务是否启动
     private serviceInited = false;
+    private playbackRequestId = 0;
     // 播放队列索引map
     private playListIndexMap = createMediaIndexMap([] as IMusic.IMusicItem[]);
 
@@ -403,6 +408,7 @@ class TrackPlayer extends EventEmitter<{
         musicItem?: IMusic.IMusicItem | null,
         forcePlay?: boolean,
     ): Promise<void> {
+        const playbackRequestId = ++this.playbackRequestId;
         try {
             // 如果不传参，默认是播放当前音乐
             if (!musicItem) {
@@ -468,11 +474,10 @@ class TrackPlayer extends EventEmitter<{
 
             // 4. 更新列表状态和当前音乐
             this.setCurrentMusic(musicItem);
-            await ReactNativeTrackPlayer.setQueue([{
+            await ReactNativeTrackPlayer.setQueue([this.patchMediaArtwork({
                 ...musicItem,
                 url: TrackPlayer.proposedAudioUrl,
-                artwork: resolveImportedAssetOrPath(musicItem.artwork?.trim?.()?.length ? musicItem.artwork : ImgAsset.albumDefault) as unknown as any,
-            }, this.getFakeNextTrack()]);
+            })!, this.getFakeNextTrack()]);
 
             // 5. 获取音源
             let track: IMusic.IMusicItem;
@@ -486,13 +491,23 @@ class TrackPlayer extends EventEmitter<{
             );
             // 5.3 插件返回音源
             let source: IPlugin.IMediaSourceResult | null = null;
+            let sourceError: unknown = null;
             for (let quality of qualityOrder) {
                 if (this.isCurrentMusic(musicItem)) {
-                    source =
-                        (await plugin?.methods?.getMediaSource(
-                            musicItem,
-                            quality,
-                        )) ?? null;
+                    try {
+                        source =
+                            (await plugin?.methods?.getMediaSource(
+                                musicItem,
+                                quality,
+                                undefined,
+                                undefined,
+                                true,
+                            )) ?? null;
+                    } catch (error) {
+                        sourceError = error;
+                        // Configuration errors cannot be repaired by changing quality.
+                        break;
+                    }
                     // 5.3.1 获取到真实源
                     if (source) {
                         this.setQuality(quality);
@@ -509,7 +524,7 @@ class TrackPlayer extends EventEmitter<{
             }
             if (!source) {
                 // 如果有source
-                if (musicItem.source) {
+                if (musicItem.source && !sourceError) {
                     for (let quality of qualityOrder) {
                         if (musicItem.source[quality]?.url) {
                             source = musicItem.source[quality]!;
@@ -520,7 +535,7 @@ class TrackPlayer extends EventEmitter<{
                     }
                 }
                 // 5.4 没有返回源
-                if (!source && !musicItem.url) {
+                if (!source && (!musicItem.url || sourceError)) {
                     // 插件失效的情况
                     if (this.configService.getConfig("basic.tryChangeSourceWhenPlayFail")) {
                         // 重试
@@ -536,11 +551,19 @@ class TrackPlayer extends EventEmitter<{
 
                             for (let quality of qualityOrder) {
                                 if (this.isCurrentMusic(musicItem)) {
-                                    source =
-                                        (await similarMusicPlugin?.methods?.getMediaSource(
-                                            similarMusic,
-                                            quality,
-                                        )) ?? null;
+                                    try {
+                                        source =
+                                            (await similarMusicPlugin?.methods?.getMediaSource(
+                                                similarMusic,
+                                                quality,
+                                                undefined,
+                                                undefined,
+                                                true,
+                                            )) ?? null;
+                                    } catch (error) {
+                                        sourceError = sourceError ?? error;
+                                        break;
+                                    }
                                     // 5.4.1 获取到真实源
                                     if (source) {
                                         this.setQuality(quality);
@@ -554,12 +577,12 @@ class TrackPlayer extends EventEmitter<{
                         }
 
                         if (!source) {
-                            throw new Error(PlayFailReason.INVALID_SOURCE);
+                            throw sourceError ?? new Error(PlayFailReason.INVALID_SOURCE);
                         }
                     } else {
-                        throw new Error(PlayFailReason.INVALID_SOURCE);
+                        throw sourceError ?? new Error(PlayFailReason.INVALID_SOURCE);
                     }
-                } else {
+                } else if (!source) {
                     source = {
                         url: musicItem.url,
                     };
@@ -610,6 +633,42 @@ class TrackPlayer extends EventEmitter<{
                 }
             }
         } catch (e: any) {
+            const errorKind = getPluginPlaybackErrorKind(e);
+            if (errorKind) {
+                if (playbackRequestId !== this.playbackRequestId || !this.isCurrentMusic(musicItem)) {
+                    return;
+                }
+                await ReactNativeTrackPlayer.reset();
+                if (playbackRequestId !== this.playbackRequestId) {
+                    return;
+                }
+                const plugin = musicItem ? this.pluginManagerService.getByMedia(musicItem) : undefined;
+                const title = i18n.t("playbackError.title", { platform: musicItem?.platform ?? "" });
+                if (getCurrentDialog()?.payload?.title !== title) {
+                    const canConfigure = Array.isArray(plugin?.instance?.userVariables);
+                    showDialog("SimpleDialog", {
+                        title,
+                        content: i18n.t(`playbackError.${errorKind}`),
+                        okText: canConfigure ? i18n.t("playbackError.configure") : i18n.t("common.confirm"),
+                        cancelText: i18n.t("playbackError.dismiss"),
+                        onOk: canConfigure ? () => {
+                            showPanel("SetUserVariables", {
+                                variables: plugin.instance.userVariables,
+                                initValues: this.pluginManagerService.getUserVariables(plugin),
+                                onValidate: plugin.supportedMethods?.has("validateUserVariables")
+                                    ? values => plugin.methods.validateUserVariables(values)
+                                    : undefined,
+                                onOk: (values, closePanel) => {
+                                    this.pluginManagerService.setUserVariables(plugin, values);
+                                    Toast.success(i18n.t("toast.settingSuccess"));
+                                    closePanel();
+                                },
+                            });
+                        } : undefined,
+                    });
+                }
+                return;
+            }
             const message = e?.message;
             if (
                 message ===
@@ -916,8 +975,11 @@ class TrackPlayer extends EventEmitter<{
     private async handlePlayFail() {
         // 如果自动跳转下一曲, 500s后自动跳转
         if (!this.configService.getConfig("basic.autoStopWhenError")) {
+            const playbackRequestId = this.playbackRequestId;
             await delay(500);
-            await this.skipToNext();
+            if (playbackRequestId === this.playbackRequestId) {
+                await this.skipToNext();
+            }
         }
     }
 
@@ -965,7 +1027,7 @@ class TrackPlayer extends EventEmitter<{
                     break;
                 } else {
                     const dist =
-                        minDistance(keyword, musicItem.title) +
+                        minDistance(keyword, item.title) +
                         minDistance(item.artist, musicItem.artist);
                     if (dist < distance) {
                         distance = dist;

@@ -1,4 +1,12 @@
 {
+    "configValidation.checking": "Checking…",
+    "configValidation.hint": "The server and account are checked before saving. Cancel to configure later if you have forgotten your password.",
+    "configValidation.authentication": "Incorrect username or password, or access denied. Edit and retry, or cancel to configure later.",
+    "configValidation.configuration": "Enter the server address, username and password.",
+    "configValidation.network": "Cannot connect to the server. Check the address and network, then retry or cancel.",
+    "configValidation.server": "The server returned an unexpected response. Check the address and service, then retry.",
+    "configValidation.media": "The server could not complete validation. Check the service and retry.",
+    "configValidation.failed": "Validation failed. Check the settings and retry, or cancel.",
     "common.setting": "Settings",
     "common.software": "Software",
     "common.language": "Language",
@@ -122,7 +130,7 @@
     "artistDetail.musicSheet": "{artist} - Singles",
     "pluginSetting.pluginItem.options.updatePlugin": "Update Plugin",
     "pluginSetting.pluginItem.options.sharePlugin": "Share Plugin",
-    "pluginSetting.pluginItem.options.uninstallPlugin": "Uninstall Plugin",    
+    "pluginSetting.pluginItem.options.uninstallPlugin": "Uninstall Plugin",
     "pluginSetting.pluginItem.options.uninstallPluginContent": "Are you sure to uninstall plugin「{name}」?",
     "pluginSetting.pluginItem.options.alternativePlugin": "Plugin Redirect",
     "pluginSetting.pluginItem.alternativePlugin": "This plugin actually uses「{name}」plugin to parse music sources",
@@ -429,5 +437,13 @@
     "panel.sheetTags.title": "Playlist Categories",
     "repeatMode.SHUFFLE": "Shuffle",
     "repeatMode.QUEUE": "Repeat Queue",
-    "repeatMode.SINGLE": "Repeat Single"
+    "repeatMode.SINGLE": "Repeat Single",
+    "playbackError.title": "{{platform}} cannot play right now",
+    "playbackError.configuration": "Enter the music server address, username and password in this plugin’s settings. Save, then tap Play again.",
+    "playbackError.authentication": "The username or password is incorrect. Check this plugin’s account settings, save, then tap Play again.",
+    "playbackError.network": "Cannot connect to the music service. Check your network and server address, then try again.",
+    "playbackError.server": "The music service returned unexpected content. Check the server address and service status, then try again.",
+    "playbackError.media": "This song is no longer in the music library. Refresh the playlist or choose another song.",
+    "playbackError.configure": "Configure",
+    "playbackError.dismiss": "Later"
 }

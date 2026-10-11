@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, StyleSheet } from "react-native";
 import rpx, { vmax } from "@/utils/rpx";
 import useColors from "@/hooks/useColors";
@@ -11,24 +11,65 @@ import ListItem from "@/components/base/listItem";
 import Input from "@/components/base/input";
 import globalStyle from "@/constants/globalStyle";
 import PanelHeader from "../base/panelHeader";
+import { useI18N } from "@/core/i18n";
+import { getPluginPlaybackErrorKind } from "@/utils/pluginPlaybackError";
 
 interface IUserVariablesProps {
     title?: string;
-    onOk: (values: Record<string, string>, closePanel: () => void) => void;
+    onOk: (values: Record<string, string>, closePanel: () => void) => void | Promise<void>;
+    onValidate?: (values: Record<string, string>) => Promise<void>;
     variables: IPlugin.IUserVariable[];
     initValues?: Record<string, string>;
     onCancel?: () => void;
 }
 
 export default function SetUserVariables(props: IUserVariablesProps) {
-    const { onOk, onCancel, variables, initValues = {}, title } = props;
+    const { onOk, onCancel, onValidate, variables, initValues = {}, title } = props;
 
     const colors = useColors();
 
+    const { t } = useI18N();
     const resultRef = useRef({ ...initValues });
+    const attemptRef = useRef(0);
+    const inFlightRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
+
+    const invalidateAttempt = () => { ++attemptRef.current; };
+    useEffect(() => invalidateAttempt, []);
+
+    const save = async () => {
+        if (inFlightRef.current) {
+            return;
+        }
+        const attempt = ++attemptRef.current;
+        inFlightRef.current = true;
+        setSaving(true);
+        setValidationError(null);
+        const values = { ...resultRef.current };
+        try {
+            await onValidate?.(values);
+            // Cancel, back, outside tap and unmount all invalidate a pending check.
+            if (attempt !== attemptRef.current) {
+                return;
+            }
+            await onOk(values, hidePanel);
+        } catch (error) {
+            if (attempt === attemptRef.current) {
+                const kind = getPluginPlaybackErrorKind(error);
+                setValidationError(t(`configValidation.${kind ?? "failed"}`));
+            }
+        } finally {
+            if (attempt === attemptRef.current) {
+                inFlightRef.current = false;
+                setSaving(false);
+            }
+        }
+    };
 
     return (
         <PanelBase
+            onDismiss={invalidateAttempt}
             height={vmax(80)}
             positionMethod='top'
             keyboardAvoidBehavior='none'
@@ -36,13 +77,13 @@ export default function SetUserVariables(props: IUserVariablesProps) {
                 <>
                     <PanelHeader
                         title={title ?? "设置用户变量"}
+                        okText={saving ? t("configValidation.checking") : onValidate ? t("common.save") : undefined}
                         onCancel={() => {
+                            invalidateAttempt();
                             onCancel?.();
                             hidePanel();
                         }}
-                        onOk={async () => {
-                            onOk(resultRef.current, hidePanel);
-                        }}
+                        onOk={save}
                     />
                     <KeyboardAvoidingView
                         behavior="padding"
@@ -51,8 +92,15 @@ export default function SetUserVariables(props: IUserVariablesProps) {
                             contentContainerStyle={{
                                 paddingBottom: vmax(20),
                             }}>
+                            {onValidate ? <ThemeText style={styles.validationMessage}>
+                                {t("configValidation.hint")}
+                            </ThemeText> : null}
+                            {validationError ? <ThemeText accessibilityRole="alert" style={styles.validationMessage} fontColor="primary">
+                                {validationError}
+                            </ThemeText> : null}
                             {variables.map(it => (
                                 <ListItem
+                                    key={it.key}
                                     withHorizontalPadding
                                     style={styles.listItem}>
                                     <ThemeText
@@ -63,8 +111,10 @@ export default function SetUserVariables(props: IUserVariablesProps) {
                                     </ThemeText>
                                     <Input
                                         defaultValue={initValues[it.key]}
+                                        editable={!saving}
                                         onChangeText={e => {
                                             resultRef.current[it.key] = e;
+                                            setValidationError(null);
                                         }}
                                         style={[
                                             styles.input,
@@ -86,6 +136,10 @@ export default function SetUserVariables(props: IUserVariablesProps) {
 }
 
 const styles = StyleSheet.create({
+    validationMessage: {
+        paddingHorizontal: rpx(24),
+        paddingVertical: rpx(12),
+    },
     wrapper: {
         width: rpx(750),
     },
