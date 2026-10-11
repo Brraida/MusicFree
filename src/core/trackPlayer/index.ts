@@ -39,6 +39,7 @@ import minDistance from "@/utils/minDistance";
 import { IPluginManager } from "@/types/core/pluginManager";
 import { ImgAsset } from "@/constants/assetsConst";
 import { resolveImportedAssetOrPath } from "@/utils/fileUtils";
+import { normalizePlayerMetadata } from "@/utils/playerMetadata";
 
 
 
@@ -217,11 +218,15 @@ class TrackPlayer extends EventEmitter<{
                         await ReactNativeTrackPlayer.getActiveTrack();
                     if (currentTrack?.isInit) {
                         // HACK: 避免初始失败的情况
-                        ReactNativeTrackPlayer.updateMetadataForTrack(0, {
-                            ...currentTrack,
-                            // @ts-ignore
-                            isInit: undefined,
-                        });
+                        try {
+                            await ReactNativeTrackPlayer.updateMetadataForTrack(0, this.patchMediaArtwork({
+                                ...currentTrack,
+                                // @ts-ignore
+                                isInit: undefined,
+                            }));
+                        } catch (metadataError) {
+                            errorLog("更新初始曲目元数据失败", metadataError);
+                        }
                         return;
                     }
 
@@ -594,10 +599,15 @@ class TrackPlayer extends EventEmitter<{
             if (info && this.isCurrentMusic(musicItem)) {
                 const mergedTrack = this.mergeTrackSource(track, info);
                 getDefaultStore().set(currentMusicAtom, mergedTrack as IMusic.IMusicItem);
-                await ReactNativeTrackPlayer.updateMetadataForTrack(
-                    0,
-                    mergedTrack as TrackMetadataBase,
-                );
+                // Supplemental artwork is optional; a failed cover update must not interrupt audio.
+                try {
+                    await ReactNativeTrackPlayer.updateMetadataForTrack(
+                        0,
+                        this.patchMediaArtwork(mergedTrack as TrackMetadataBase),
+                    );
+                } catch (metadataError) {
+                    errorLog("更新补充曲目元数据失败", metadataError);
+                }
             }
         } catch (e: any) {
             const message = e?.message;
@@ -786,7 +796,7 @@ class TrackPlayer extends EventEmitter<{
         ReactNativeTrackPlayer.updateMetadataForTrack(
             1,
             this.getFakeNextTrack(),
-        );
+        ).catch(metadataError => errorLog("更新下一曲元数据失败", metadataError));
         // 记录
         PersistStatus.set("music.repeatMode", mode);
     }
@@ -977,16 +987,12 @@ class TrackPlayer extends EventEmitter<{
     }
 
 
-    private patchMediaArtwork(track: Track) {
-        // Bug: React native track player 在设置音频时，artwork不能为null，并且部分情况下artwork不能为ImageSource类型
-        if (!track) {
-            return null;
-        }
+    private patchMediaArtwork<T extends TrackMetadataBase>(track: T): T {
+        // setQueue bypasses TrackPlayer's JS asset resolver, so resolve assets here too.
+        const metadata = normalizePlayerMetadata(track, ImgAsset.albumDefault);
         return {
-            ...track,
-            artwork: resolveImportedAssetOrPath(
-                track.artwork?.trim?.()?.length ? track.artwork : ImgAsset.albumDefault,
-            ) as unknown as any,
+            ...metadata,
+            artwork: resolveImportedAssetOrPath(metadata.artwork as string) as unknown as any,
         };
     }
 

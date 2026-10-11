@@ -1,0 +1,53 @@
+diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
+index b2409a0..bfc0868 100644
+--- a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
++++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
+@@ -18,6 +18,7 @@
+ import com.facebook.react.bridge.*
+ import com.google.android.exoplayer2.DefaultLoadControl.*
+ import com.google.android.exoplayer2.Player
++import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.MainScope
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+@@ -338,12 +339,17 @@
+             if (index < 0 || index >= musicService.tracks.size) {
+                 callback.reject("index_out_of_bounds", "The index is out of bounds")
+             } else {
+-                val context: ReactContext = context
+-                val track = musicService.tracks[index]
+-                track.setMetadata(context, Arguments.toBundle(map), musicService.ratingType)
+-                musicService.updateMetadataForTrack(index, track)
+-
+-                callback.resolve(null)
++                try {
++                    val context: ReactContext = context
++                    val track = musicService.tracks[index]
++                    track.setMetadata(context, Arguments.toBundle(map), musicService.ratingType)
++                    musicService.updateMetadataForTrack(index, track)
++                    callback.resolve(null)
++                } catch (exception: CancellationException) {
++                    throw exception
++                } catch (exception: Exception) {
++                    callback.reject("metadata_error", exception.message, exception)
++                }
+             }
+         }
+ 
+diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/utils/BundleUtils.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/utils/BundleUtils.kt
+index a46b7d2..cd97782 100644
+--- a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/utils/BundleUtils.kt
++++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/utils/BundleUtils.kt
+@@ -16,7 +16,11 @@
+         val obj = data[key]
+         if (obj is String) {
+             // Remote or Local Uri
+-            if (obj.trim { it <= ' ' }.isEmpty()) throw RuntimeException("$key: The URL cannot be empty")
++            if (obj.trim { it <= ' ' }.isEmpty()) {
++                // Artwork is optional; blank plugin covers must not crash the player.
++                if (key == "artwork") return null
++                throw RuntimeException("$key: The URL cannot be empty")
++            }
+             return Uri.parse(obj as String?)
+         } else if (obj is Bundle) {
+             // require/import
