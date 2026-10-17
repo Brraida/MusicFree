@@ -5,7 +5,7 @@
 1. 使用 Node.js 22、`npm ci` 安装锁定依赖，并通过 `patch-package` 应用原生补丁。
 2. 运行全部 Jest 单元测试，上传覆盖率报告；测试失败时停止构建。
 3. 读取仓库的发布签名 Secrets，检查 Base64 格式、密钥库密码、私钥别名，并拒绝使用仓库 debug 密钥。
-4. 使用 Java 17 和仓库 Gradle Wrapper 执行 `assembleRelease`，打入 JS/Hermes。
+4. 使用 Java 17 和仓库 Gradle Wrapper 执行 `assembleRelease`，打入 JS/Hermes；GitHub Runner 使用 Google Maven 和 Maven Central，避开区域镜像故障。
 5. 使用 Android 官方 `apksigner` 校验每个 APK，并确认签名证书与上传的发布密钥一致。
 6. 上传各 CPU 架构 APK、通用 APK、`SHA256SUMS.txt` 和公开证书指纹 `SIGNING_CERT_SHA256.txt`，保留 30 天。
 
