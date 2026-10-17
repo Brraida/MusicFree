@@ -62,11 +62,6 @@ react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", rootDir.getAbsoluteFile().getParentFile().getAbsolutePath(), "android", "absolute"].execute(null, rootDir).text.trim())
     cliFile = new File(["node", "--print", "require.resolve('@expo/cli')"].execute(null, rootDir).text.trim())
     bundleCommand = "export:embed"
-    //
-    // Added by install-expo-modules
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", rootDir.getAbsoluteFile().getParentFile().getAbsolutePath(), "android", "absolute"].execute(null, rootDir).text.trim())
-    cliFile = new File(["node", "--print", "require.resolve('@expo/cli')"].execute(null, rootDir).text.trim())
-    bundleCommand = "export:embed"
 }
 
 /**
@@ -91,8 +86,11 @@ def jscFlavor = 'org.webkit:android-jsc:+'
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
+
+def releaseSigningKeys = ['RELEASE_STORE_FILE', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_ALIAS', 'RELEASE_KEY_PASSWORD']
+def hasReleaseSigning = releaseSigningKeys.every { keystoreProperties[it]?.trim() }
 
 static def getVersion() {
     def inputFile = new File("../package.json")
@@ -140,18 +138,21 @@ android {
         }
         // !! Add lines
          release {
+          if (hasReleaseSigning) {
             storeFile file(keystoreProperties['RELEASE_STORE_FILE'])
             storePassword keystoreProperties['RELEASE_STORE_PASSWORD']
             keyAlias keystoreProperties['RELEASE_KEY_ALIAS']
             keyPassword keystoreProperties['RELEASE_KEY_PASSWORD']
+          }
         }
     }
     splits {
             abi {
                 reset()
                 enable true
-                universalApk true
-                include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+                // A single-ABI local build must not publish a mixed-ABI universal APK.
+                universalApk(reactNativeArchitectures.split(",").length > 1)
+                include(*reactNativeArchitectures.split(","))
             }
     }
 
@@ -164,9 +165,27 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.release
+            signingConfig hasReleaseSigning ? signingConfigs.release : null
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+        // Standalone local device testing: bundled JS/Hermes, separate app data.
+        localTest {
+            initWith release
+            applicationIdSuffix '.localtest'
+            resValue 'string', 'app_name', 'MusicFree Local Test'
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+    }
+}
+
+// Missing production credentials must not block debug/localTest configuration.
+// A real release still fails explicitly instead of silently using a debug key.
+tasks.matching { it.name == 'preReleaseBuild' }.configureEach {
+    doFirst {
+        if (!hasReleaseSigning) {
+            throw new GradleException('Release signing is missing: create android/keystore.properties, or use assembleLocalTest for device testing.')
         }
     }
 }
