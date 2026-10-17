@@ -49,7 +49,7 @@ jobs:
           if-no-files-found: warn
 
   build:
-    name: Build installable APKs
+    name: Build signed release APKs
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -81,11 +81,92 @@ jobs:
       - name: Install dependencies and apply native patches
         run: npm ci --prefer-offline --no-audit
 
-      - name: Build standalone test APKs
+      - name: Restore and validate release signing
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const required = ['RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_ALIAS', 'RELEASE_KEY_PASSWORD'];
+          for (const name of required) {
+            if (!process.env[name]) throw new Error('Missing repository secret: ' + name);
+          }
+          const encoded = process.env.RELEASE_KEYSTORE_BASE64.replace(/\s/g, '');
+          if (!encoded || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+            throw new Error('RELEASE_KEYSTORE_BASE64 must contain only the Base64-encoded keystore file.');
+          }
+          const store = path.join(process.env.RUNNER_TEMP, 'musicfree-release.keystore');
+          fs.writeFileSync(store, Buffer.from(encoded, 'base64'), {mode: 0o600});
+          // Escape Java properties values, including passwords containing spaces or backslashes.
+          const escape = value => value.replace(/[\u0000-\u0020\\:=#!\u007f-\uffff]/g,
+            char => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
+          const properties = {
+            RELEASE_STORE_FILE: store,
+            RELEASE_STORE_PASSWORD: process.env.RELEASE_STORE_PASSWORD,
+            RELEASE_KEY_ALIAS: process.env.RELEASE_KEY_ALIAS,
+            RELEASE_KEY_PASSWORD: process.env.RELEASE_KEY_PASSWORD,
+          };
+          fs.writeFileSync('android/keystore.properties',
+            Object.entries(properties).map(([key, value]) => key + '=' + escape(value)).join('\n') + '\n',
+            {mode: 0o600});
+          NODE
+          if ! entry=$(keytool -J-Duser.language=en -list \
+            -keystore "$RUNNER_TEMP/musicfree-release.keystore" \
+            -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" 2>/dev/null); then
+            echo '::error::Cannot open the release key. Check the keystore file, store password and alias Secrets.'
+            exit 1
+          fi
+          if ! grep -q 'PrivateKeyEntry' <<< "$entry"; then
+            echo '::error::The selected alias must contain a private signing key.'
+            exit 1
+          fi
+          keytool -exportcert -keystore "$RUNNER_TEMP/musicfree-release.keystore" \
+            -storepass:env RELEASE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" \
+            -file "$RUNNER_TEMP/musicfree-release.der" >/dev/null 2>&1
+          keytool -exportcert -keystore android/app/debug.keystore \
+            -storepass android -alias androiddebugkey \
+            -file "$RUNNER_TEMP/musicfree-debug.der" >/dev/null 2>&1
+          if cmp -s "$RUNNER_TEMP/musicfree-release.der" "$RUNNER_TEMP/musicfree-debug.der"; then
+            echo '::error::The uploaded keystore is the repository debug key. Use your own release signing key.'
+            exit 1
+          fi
+          sha256sum "$RUNNER_TEMP/musicfree-release.der" | cut -d ' ' -f 1 \
+            > "$RUNNER_TEMP/musicfree-release-cert.sha256"
+          echo 'Release keystore, store password and private-key alias validated.'
+
+      - name: Build signed release APKs
         working-directory: android
         run: >-
-          bash ./gradlew :app:assembleLocalTest
+          bash ./gradlew :app:assembleRelease
           --no-daemon --build-cache --stacktrace --max-workers=2
+
+      - name: Remove private signing files
+        if: always()
+        run: rm -f -- android/keystore.properties "$RUNNER_TEMP/musicfree-release.keystore"
+
+      - name: Verify release APK signatures
+        run: |
+          expected=$(cat "$RUNNER_TEMP/musicfree-release-cert.sha256")
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          if ! compgen -G 'android/app/build/outputs/apk/release/*.apk' >/dev/null; then
+            echo '::error::No release APKs were generated.'
+            exit 1
+          fi
+          for apk in android/app/build/outputs/apk/release/*.apk; do
+            report=$("$apksigner" verify --verbose --print-certs "$apk")
+            actual=$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print $2}' <<< "$report")
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::Unexpected signing certificate: $(basename "$apk")"
+              exit 1
+            fi
+            echo "Release signature verified: $(basename "$apk")"
+          done
+          mkdir -p artifacts
+          cp "$RUNNER_TEMP/musicfree-release-cert.sha256" artifacts/SIGNING_CERT_SHA256.txt
 
       - name: Collect APKs and checksums
         env:
@@ -93,23 +174,23 @@ jobs:
         run: |
           mkdir -p artifacts
           version=$(node -p "require('./package.json').version")
-          for apk in android/app/build/outputs/apk/localTest/*.apk; do
+          for apk in android/app/build/outputs/apk/release/*.apk; do
             name=$(basename "$apk")
             cp "$apk" "artifacts/MusicFree-${version}-${COMMIT_SHA:0:7}-${name}"
           done
           (cd artifacts && sha256sum ./*.apk > SHA256SUMS.txt)
           {
-            echo '### Dev APKs'
+            echo '### Signed release APKs'
             echo "Version: ${version} | Commit: ${COMMIT_SHA}"
             echo ''
             echo 'Download the APK artifact below. Use the universal APK for any supported Android CPU.'
-            echo 'These standalone test builds use the debug key and a separate application ID.'
+            echo 'Signed with your release key. Application ID: fun.upup.musicfree.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: MusicFree-dev-${{ github.run_number }}
+          name: MusicFree-release-${{ github.run_number }}
           path: artifacts/
           retention-days: 30
           if-no-files-found: error
